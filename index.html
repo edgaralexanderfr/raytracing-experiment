@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raytracing Experiment</title>
+    <style type="text/css">
+        canvas {
+            background: black;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas width="640" height="360"></canvas>
+    <script type="text/javascript">
+        const EPSILON = 0.0000001;
+
+        /**
+         * @class
+         */
+        function Point3d(x, y, z) {
+            this.x = x || 0.0;
+            this.y = y || 0.0;
+            this.z = z || 0.0;
+        }
+
+        Point3d.prototype.set = function (px, py, pz) {
+            this.x = px;
+            this.y = py;
+            this.z = pz;
+        }
+
+        Point3d.prototype.scaleAdd = function (s, t1, t2) {
+            this.x = s * t1.x + t2.x;
+            this.y = s * t1.y + t2.y;
+            this.z = s * t1.z + t2.z;
+        }
+
+        Point3d.subtract = function (v1, v2) {
+            return new Vector3d(
+                v1.x - v2.x,
+                v1.y - v2.y,
+                v1.z - v2.z
+            );
+        }
+
+        /**
+        * @class
+        */
+        function Vector3d(x, y, z) {
+            this.x = x || 0.0;
+            this.y = y || 0.0;
+            this.z = z || 0.0;
+        }
+
+        Vector3d.prototype.sub = function (v1, v2) {
+            this.x = v1.x - v2.x;
+            this.y = v1.y - v2.y;
+            this.z = v1.z - v2.z;
+        }
+
+        Vector3d.prototype.cross = function (v1, v2) {
+            this.x = v1.y * v2.z - v1.z * v2.y;
+            this.y = v1.x * v2.z - v1.z * v2.x;
+            this.z = v1.x * v2.y - v1.y * v2.x;
+        }
+
+        Vector3d.prototype.dot = function (v1) {
+            return this.x * v1.x + this.y * v1.y + this.z * v1.z;
+        }
+
+        Vector3d.prototype.normalize = function () {
+            var d = x * x + y * y + z * z;
+
+            if (d != 0.0) {
+                var l = 1 / Math.sqrt(d);
+
+                this.x *= l;
+                this.y *= l;
+                this.z *= l;
+            }
+        }
+
+        /**
+        * @class
+        */
+        function Triangle(vertex0, vertex1, vertex2) {
+            this.vertex0 = vertex0 || null;
+            this.vertex1 = vertex1 || null;
+            this.vertex2 = vertex2 || null;
+        }
+
+        Triangle.prototype.getVertex0 = function () {
+            return this.vertex0;
+        }
+
+        Triangle.prototype.getVertex1 = function () {
+            return this.vertex1;
+        }
+
+        Triangle.prototype.getVertex2 = function () {
+            return this.vertex2;
+        }
+
+        /**
+         * Extracted from: https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm
+         */
+        function rayIntersectsTriangle(line, inTriangle, outIntersectionPoint) {
+            var rayOrigin = line[0];
+            var rayVector = Point3d.subtract(line[1], line[0]);
+            rayVector.normalize();
+
+            var vertex0 = inTriangle.getVertex0();
+            var vertex1 = inTriangle.getVertex1();
+            var vertex2 = inTriangle.getVertex2();
+            var edge1 = new Vector3d();
+            var edge2 = new Vector3d();
+            var h = new Vector3d();
+            var s = new Vector3d();
+            var q = new Vector3d();
+            var a, f, u, v;
+
+            edge1.sub(vertex1, vertex0);
+            edge2.sub(vertex2, vertex0);
+            h.cross(rayVector, edge2);
+            a = edge1.dot(h);
+
+            if (a > -EPSILON && a < EPSILON) {
+                return false; // This ray is parallel to this triangle.
+            }
+
+            f = 1.0 / a;
+            s.sub(rayOrigin, vertex0);
+            u = f * (s.dot(h));
+
+            if (u < 0.0 || u > 1.0) {
+                return false;
+            }
+
+            q.cross(s, edge1);
+            v = f * rayVector.dot(q);
+
+            if (v < 0.0 || u + v > 1.0) {
+                return false;
+            }
+
+            // At this stage we can compute t to find out where the intersection point is on the line.
+            var t = f * edge2.dot(q);
+
+            if (t > EPSILON) {
+                // ray intersection
+                outIntersectionPoint.set(0.0, 0.0, 0.0);
+                outIntersectionPoint.scaleAdd(t, rayVector, rayOrigin);
+
+                return true;
+            } else {
+                // This means that there is a line intersection but not a ray intersection.
+
+                return false;
+            }
+        }
+
+        const STEP = 1;
+        const FAR_CLIP_PLANE = 10;
+
+        var canvas = document.querySelector('canvas');
+        var context = canvas.getContext('2d');
+
+        var z = 0;
+        var intersectionPoint = new Point3d();
+        var triangle = new Triangle(
+            new Point3d(550, 50, -5),
+            new Point3d(300, 150, -5),
+            new Point3d(450, 300, -5)
+        );
+
+        // Loop to raycast each voxel:
+        for (var y = 0; y < canvas.height; y += STEP) {
+            for (var x = 0; x < canvas.width; x += STEP) {
+                var rayOrigin = new Point3d(x + (STEP / 2), y + (STEP / 2), z);
+                var rayTarget = new Point3d(rayOrigin.x, rayOrigin.y, FAR_CLIP_PLANE);
+
+                if (rayIntersectsTriangle([rayOrigin, rayTarget], triangle, intersectionPoint)) {
+                    context.fillStyle = 'green';
+                    context.fillRect(x, y, STEP, STEP);
+                }
+            }
+        }
+
+        console.log('Finished!');
+    </script>
+</body>
+
+</html>
